@@ -48,7 +48,7 @@ func (b *Bot) Start() error {
 			continue
 		}
 
-		b.handleMessage(update)
+		b.handleMessage(update) // TODO goroutine
 	}
 	return nil
 }
@@ -124,9 +124,9 @@ func (b *Bot) handleState(update tgbotapi.Update, state UserState, data map[stri
 
 		allCurrencies := append([]string{baseCurrency}, foreignCurrencies...)
 
-		amount, err := strconv.ParseFloat(text, 64)
-		if err != nil || amount <= 0 {
-			b.sendMessage(chatID, "Неверная сумма. Пожалуйста, введите положительное число.", nil)
+		amount, err := decimal.NewFromString(text)
+		if err != nil || amount.LessThanOrEqual(decimal.Zero) {
+			b.sendMessage(chatID, "Неверный формат числа, пожалуйста, попробуйте еще раз", nil)
 			return
 		}
 
@@ -143,11 +143,31 @@ func (b *Bot) handleState(update tgbotapi.Update, state UserState, data map[stri
 			b.stateManager.ClearState(chatID)
 			return
 		}
-		amount, _ := strconv.ParseFloat(amountStr, 64)
-		amountForCurrency := decimal.NewFromFloat(amount)
-		depositCurrency, _ := domain.NewCurrency(amountForCurrency, currency)
 
-		err := b.app.Wallets.Deposit.Deposit(strconv.FormatInt(chatID, 10), depositCurrency)
+		baseCurrency, err := b.app.Wallets.GetBaseCurrency.GetBaseCurrency(strChatID)
+		if err != nil {
+			b.sendMessage(chatID, "Не удалось получить базовую валюту.", WalletSupportKeyboard())
+			b.stateManager.SetState(chatID, StateAwaitingHelpRequest, make(map[string]string))
+			return
+		}
+
+		amount, err := decimal.NewFromString(amountStr)
+		if err != nil {
+			b.sendMessage(chatID, "Неверный формат числа, пожалуйста, повторите попытку еще раз.", nil)
+			return
+		}
+
+		depositCurrency, _ := domain.NewCurrency(amount, currency)
+
+		if baseCurrency != currency {
+			depositCurrency, err = b.app.Exchange.ConvertCurrency.ConvertFromBaseToSingle(depositCurrency, baseCurrency)
+			if err != nil {
+				b.sendMessage(chatID, "Ошибка во время конвертации валюты, повторите попытку", nil)
+				return
+			}
+		}
+
+		err = b.app.Wallets.Deposit.Deposit(strChatID, depositCurrency)
 		if err != nil {
 			b.sendMessage(chatID, "Ошибка пополнения: "+err.Error(), WalletMenuKeyboard())
 		} else {
@@ -172,9 +192,9 @@ func (b *Bot) handleState(update tgbotapi.Update, state UserState, data map[stri
 
 		allCurrencies := append([]string{baseCurrency}, foreignCurrencies...)
 
-		amount, err := strconv.ParseFloat(text, 64)
-		if err != nil || amount <= 0 {
-			b.sendMessage(chatID, "Неверная сумма. Пожалуйста, введите положительное число.", nil)
+		amount, err := decimal.NewFromString(text)
+		if err != nil || amount.LessThanOrEqual(decimal.Zero) {
+			b.sendMessage(chatID, "Неверный формат числа, пожалуйста, попробуйте еще раз", nil)
 			return
 		}
 		data["amount"] = text
@@ -189,11 +209,31 @@ func (b *Bot) handleState(update tgbotapi.Update, state UserState, data map[stri
 			b.stateManager.ClearState(chatID)
 			return
 		}
-		amount, _ := strconv.ParseFloat(amountStr, 64)
-		amountForCurrency := decimal.NewFromFloat(amount)
-		withdrawCurrency, _ := domain.NewCurrency(amountForCurrency, currency)
 
-		err := b.app.Wallets.Withdraw.Withdraw(strconv.FormatInt(chatID, 10), withdrawCurrency)
+		amount, err := decimal.NewFromString(amountStr)
+		if err != nil {
+			b.sendMessage(chatID, "Неверный формат числа, пожалуйста, повторите попытку еще раз.", nil)
+			return
+		}
+
+		baseCurrency, err := b.app.Wallets.GetBaseCurrency.GetBaseCurrency(strChatID)
+		if err != nil {
+			b.sendMessage(chatID, "Не удалось получить базовую валюту.", WalletSupportKeyboard())
+			b.stateManager.SetState(chatID, StateAwaitingHelpRequest, make(map[string]string))
+			return
+		}
+
+		withdrawCurrency, _ := domain.NewCurrency(amount, currency)
+
+		if baseCurrency != currency {
+			withdrawCurrency, err = b.app.Exchange.ConvertCurrency.ConvertFromBaseToSingle(withdrawCurrency, baseCurrency)
+			if err != nil {
+				b.sendMessage(chatID, "Ошибка во время конвертации валюты, повторите попытку", nil)
+				return
+			}
+		}
+
+		err = b.app.Wallets.Withdraw.Withdraw(strChatID, withdrawCurrency)
 		if err != nil {
 			b.sendMessage(chatID, "Ошибка снятия: "+err.Error(), WalletMenuKeyboard())
 		} else {

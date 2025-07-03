@@ -37,7 +37,7 @@ func (c *CurrencyConverterGateway) ConvertToAnother(currency domain.Currency, an
 
 	json.Unmarshal(body, &responseStruct)
 
-	curr, _ := domain.NewCurrency(decimal.NewFromFloat(responseStruct.Data.Mid), another)
+	curr, _ := domain.NewCurrency(decimal.NewFromFloat(responseStruct.Data.Mid).Mul(currency.GetAmount()), another)
 	return curr, nil
 }
 

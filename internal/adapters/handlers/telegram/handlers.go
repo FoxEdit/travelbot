@@ -97,12 +97,12 @@ func (b *Bot) handleGetBalance(update tgbotapi.Update) {
 	}
 
 	var responseText strings.Builder
-	responseText.WriteString(fmt.Sprintf("Ваш баланс: %s %s", balance.String(), balanceBaseCurrency))
+	responseText.WriteString(fmt.Sprintf("Ваш баланс: %s %s", balance.StringFixed(2), balanceBaseCurrency))
 
 	if len(foreignCurrenciesBalance) != 0 {
 		responseText.WriteString("\n\nБаланс в валюте:\n")
 		for _, v := range foreignCurrenciesBalance {
-			responseText.WriteString(fmt.Sprintf("💠 %s: %s\n", v.GetCurrencyCode(), v.GetAmount().Mul(balance).StringFixed(2)))
+			responseText.WriteString(fmt.Sprintf("💠 %s: %s\n", v.GetCurrencyCode(), v.GetAmount().StringFixed(2)))
 		}
 	}
 
